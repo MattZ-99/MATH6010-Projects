@@ -19,9 +19,7 @@ Todo:
 
 import numpy as np
 
-a = np.ones(5)
-b = a[1]
-b += 1
-print(a)
-a[[1, 3]][1] += 1
-print(a)
+a = np.zeros(10, dtype=np.bool_)
+print(~a)
+a = a | True
+print(a == 1)
