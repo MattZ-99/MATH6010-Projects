@@ -53,15 +53,16 @@ class DerandomizationForMinimumMonochromaticK4(object):
         """
 
         super(DerandomizationForMinimumMonochromaticK4, self).__init__()
+        self.__heterochromatic_value = 100
         self.n = n
 
-        # Initialize weight for n1 < n2 < n3 < n4.
+        self.colored_edge_num = np.zeros(shape=(n, n, n, n), dtype=np.int8)  # Init colored edger number.
+
+        self.true_k4_pos = np.zeros(shape=(n, n, n, n), dtype=np.bool_)
         coordinate = np.linspace(0, n, n, endpoint=False, dtype=np.int8)
         n1, n2, n3, n4 = np.meshgrid(coordinate, coordinate, coordinate, coordinate, indexing='ij', copy=False)
-        self.weight_array = np.where((n4 > n3) & (n3 > n2) & (n2 > n1), 2 ** (-5), 0)
-        # self.weight_array = self.weight_array.astype(np.float32)
+        self.true_k4_pos[(n1 < n2) & (n2 < n3) & (n3 < n4)] |= True
 
-        self.colored_edge_num = np.zeros(shape=(n, n, n, n), dtype=np.bool_)  # Init colored edger number.
         self.edge_color_list = np.zeros(shape=(n, n), dtype=np.int8)  # Initialize adjacent matrix for color edges.
 
     def _iter_edge(self):
@@ -85,22 +86,24 @@ class DerandomizationForMinimumMonochromaticK4(object):
         """Calculate relative weight for one step (e.g. for edge i)."""
 
         n1, n2 = edge[0], edge[1]
-        k4_mat = list()
         color_mat = list()
+        pos_true_mat = list()
 
         for pos in self._position_slice_generator(n1, n2):
-            weight_array = self.weight_array[pos]
-            k4_mat.append(weight_array)
             colored_edge_num = self.colored_edge_num[pos]
             color_mat.append(colored_edge_num)
+            pos_true = self.true_k4_pos[pos]
+            pos_true_mat.append(pos_true)
 
         colored_edge_num = np.concatenate(color_mat, axis=0)
-        weight_past = np.concatenate(k4_mat, axis=0)
+        pos_true_mat = np.concatenate(pos_true_mat, axis=0)
 
-        weight_white = np.sum(weight_past[~colored_edge_num]) + \
-                       np.sum(weight_past[colored_edge_num & (weight_past > 0)]) * 2
-        weight_black = np.sum(weight_past[~colored_edge_num]) + \
-                       np.sum(weight_past[colored_edge_num & (weight_past < 0)]) * (-2)
+        weight_white = np.sum(2. **
+                              (colored_edge_num[(colored_edge_num >= 0) & pos_true_mat
+                                                & (colored_edge_num != self.__heterochromatic_value)] - 5))
+        weight_black = np.sum(2. **
+                              (-colored_edge_num[(colored_edge_num <= 0) & pos_true_mat
+                                                 & (colored_edge_num != self.__heterochromatic_value)] - 5))
 
         return weight_white > weight_black
 
@@ -111,19 +114,16 @@ class DerandomizationForMinimumMonochromaticK4(object):
 
         for pos in self._position_slice_generator(n1, n2):
 
-            weight_past = self.weight_array[pos]
-            colored_edge_num = self.colored_edge_num[pos]
-
             if colored_black:
-                weight_past[~colored_edge_num] *= -1
-                weight_past[colored_edge_num & (weight_past > 0)] = 0
-                weight_past[colored_edge_num & (weight_past < 0)] *= 2
+                self.colored_edge_num[pos] = np.where((self.colored_edge_num[pos] <= 0) & (self.true_k4_pos[pos])
+                                                      & (self.colored_edge_num[pos] != self.__heterochromatic_value),
+                                                      self.colored_edge_num[pos] - 1, self.__heterochromatic_value
+                                                      )
             else:
-                weight_past[colored_edge_num & (weight_past > 0)] *= 2
-                weight_past[colored_edge_num & (weight_past < 0)] = 0
-
-            self.weight_array[pos] = weight_past
-            self.colored_edge_num[pos] = self.colored_edge_num[pos] | True
+                self.colored_edge_num[pos] = np.where((self.colored_edge_num[pos] >= 0) & (self.true_k4_pos[pos])
+                                                      & (self.colored_edge_num[pos] != self.__heterochromatic_value),
+                                                      self.colored_edge_num[pos] + 1, self.__heterochromatic_value
+                                                      )
 
     def _update_color_adjacent_matrix(self, edge: list, colored_black: bool):
         """Update color adjacent matrix for one step."""
@@ -146,8 +146,8 @@ class DerandomizationForMinimumMonochromaticK4(object):
     def get_monochromatic_number(self):
         """Final results. Count the number of monochromatic K4."""
 
-        monochromatic_white = np.sum((self.weight_array == 1))
-        monochromatic_black = np.sum((self.weight_array == -1))
+        monochromatic_white = np.sum((self.colored_edge_num == 6))
+        monochromatic_black = np.sum((self.colored_edge_num == -6))
         return monochromatic_white + monochromatic_black, monochromatic_white, monochromatic_black
 
 

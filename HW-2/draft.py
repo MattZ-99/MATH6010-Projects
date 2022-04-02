@@ -18,8 +18,6 @@ Todo:
 """
 
 import numpy as np
-
-a = np.zeros(10, dtype=np.bool_)
-print(~a)
-a = a | True
-print(a == 1)
+b = np.zeros(10, dtype=np.bool_)
+b[:] |= True
+print(b)
